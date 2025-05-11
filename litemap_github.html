@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>高德地图路线规划示例</title>
+    <title>Litemap</title>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <style>
@@ -55,7 +55,7 @@
         }
     </style>
     <!-- 加载高德地图JS API -->
-    <script type="text/javascript" src="https://webapi.amap.com/maps?v=1.4.15&key=1ad286613ca45be3af6250e035ac5c21"></script>
+    <script type="text/javascript" src="https://webapi.amap.com/maps?v=1.4.15&key=输入你的高德地图JS API"></script>
     <script type="text/javascript" src="https://webapi.amap.com/ui/1.1/main.js?v=1.1.0"></script>
 </head>
 <body>
@@ -161,7 +161,7 @@
             }
 
             // 使用高德地图Web服务API的地理编码服务
-            var geocodeUrl = `https://restapi.amap.com/v3/geocode/geo?key=3bf3c2f8c787e10ad549dfb9206468df&address=${encodeURIComponent(address)}`;
+            var geocodeUrl = `https://restapi.amap.com/v3/geocode/geo?key=输入你的高德地图Web服务API&address=${encodeURIComponent(address)}`;
 
             fetch(geocodeUrl)
                 .then(response => response.json())
