@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>高德地图路线规划示例</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        #container {
+            width: 100%;
+            height: 100vh;
+        }
+        .info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: white;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+        #calibrateButton {
+            padding: 5px 10px;
+            background: #007bff;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #directionButton {
+            padding: 5px 10px;
+            background: #28a745;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #addressInput {
+            width: 200px;
+            padding: 5px;
+            margin-right: 5px;
+        }
+        #geocodeButton {
+            padding: 5px 10px;
+            background: #17a2b8;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        #clearButton {
+            padding: 5px 10px;
+            background: #DC3545;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .strategyOptions {
+            margin-top: 10px;
+        }
+    </style>
+    <!-- 加载高德地图JS API -->
+    <script type="text/javascript" src="https://webapi.amap.com/maps?v=1.4.15&key=1ad286613ca45be3af6250e035ac5c21"></script>
+    <script type="text/javascript" src="https://webapi.amap.com/ui/1.1/main.js?v=1.1.0"></script>
+</head>
+<body>
+    <div id="container"></div>
+    <div class="info">
+        <h4 id="status">定位中...</h4>
+        <p id="result"></p>
+        <input type="text" id="addressInput" placeholder="请输入地址">
+        <select id="mode">
+            <option value="driving">驾车</option>
+        </select>
+        <div class="strategyOptions">
+            <label>
+                <input type="checkbox" id="avoidHighway"> 避开高速
+            </label>
+            <label>
+                <input type="checkbox" id="avoidElevated"> 避开高架
+            </label>
+            <label>
+                <input type="checkbox" id="avoidBicycleProhibited"> 避开非机动车禁行道路
+            </label>
+        </div>
+        <button id="geocodeButton">搜索终点</button>
+        <button id="calibrateButton">纠正坐标</button>
+        <button id="directionButton">开始导航</button>
+        <button id="clearButton">清除路线</button>
+    </div>
+    <script type="text/javascript">
+        // 初始化地图
+        var map = new AMap.Map('container', {
+            center: [116.397428, 39.90923], // 默认中心点
+            zoom: 13 // 地图缩放级别
+        });
+
+        // 用户位置标记
+        var userMarker;
+
+        // 旧路线
+        var oldPolyline;
+
+        // 目的地标记
+        var destinationMarker;
+
+        // 使用HTML5 Geolocation API获取用户位置
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(function (position) {
+                var coords = position.coords;
+                var latitude = coords.latitude; // 纬度
+                var longitude = coords.longitude; // 经度
+
+                // 更新地图中心点为用户位置
+                map.setCenter([longitude, latitude]);
+
+                // 添加用户位置标记
+                userMarker = new AMap.Marker({
+                    position: [longitude, latitude], // 标记位置
+                    title: "您的位置", // 标记标题
+                    draggable: true, // 标记可拖动
+                    map: map // 将标记添加到地图上
+                });
+
+                // 更新状态信息
+                document.getElementById('status').innerHTML = '定位成功';
+                document.getElementById('result').innerHTML = `
+                    经纬度：${longitude},${latitude}<br>
+                    精度：${coords.accuracy} 米
+                `;
+
+                // 纠正坐标按钮点击事件
+                document.getElementById('calibrateButton').addEventListener('click', function () {
+                    // 启用标记的拖动功能
+                    userMarker.setDraggable(true);
+                    map.setCenter(userMarker.getPosition()); // 将地图中心点设置为标记位置
+                });
+
+                // 监听标记拖动事件
+                userMarker.on('dragend', function () {
+                    var newPosition = userMarker.getPosition();
+                    map.setCenter(newPosition); // 更新地图中心点为新的标记位置
+                    document.getElementById('result').innerHTML = `
+                        经纬度：${newPosition.lng},${newPosition.lat}<br>
+                        地址：手动校准后的位置
+                    `;
+                });
+            }, function (error) {
+                console.error('定位失败', error);
+                document.getElementById('status').innerHTML = '定位失败';
+                document.getElementById('result').innerHTML = '定位失败原因：' + error.message;
+            });
+        } else {
+            console.error('浏览器不支持Geolocation API');
+            document.getElementById('status').innerHTML = '定位失败';
+            document.getElementById('result').innerHTML = '您的浏览器不支持定位功能';
+        }
+
+        // 搜索终点功能
+        document.getElementById('geocodeButton').addEventListener('click', function () {
+            var address = document.getElementById('addressInput').value;
+
+            if (!address) {
+                alert('请输入地址');
+                return;
+            }
+
+            // 使用高德地图Web服务API的地理编码服务
+            var geocodeUrl = `https://restapi.amap.com/v3/geocode/geo?key=3bf3c2f8c787e10ad549dfb9206468df&address=${encodeURIComponent(address)}`;
+
+            fetch(geocodeUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === '1' && data.geocodes.length > 0) {
+                        var geoInfo = data.geocodes[0];
+                        var coords = geoInfo.location.split(',');
+                        var longitude = coords[0];
+                        var latitude = coords[1];
+
+                        // 更新地图中心点为新位置
+                        map.setCenter([longitude, latitude]);
+
+                        // 添加目的地标记
+                        if (destinationMarker) {
+                            map.remove(destinationMarker); // 移除旧的目的地标记
+                        }
+                        destinationMarker = new AMap.Marker({
+                            position: [longitude, latitude], // 标记位置
+                            title: "目的地", // 标记标题
+                            icon: new AMap.Icon({
+                                size: new AMap.Size(40, 50),
+                                image: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_r.png', // 自定义图标
+                                imageSize: new AMap.Size(40, 50)
+                            }),
+                            map: map // 将标记添加到地图上
+                        });
+
+                        // 更新状态信息
+                        document.getElementById('status').innerHTML = '定位成功';
+                        document.getElementById('result').innerHTML = `
+                            经纬度：${longitude},${latitude}<br>
+                            地址：${geoInfo.formatted_address}
+                        `;
+                    } else {
+                        alert('地址解析失败，请检查输入或网络连接');
+                    }
+                })
+                .catch(error => {
+                    console.error('地址解析失败', error);
+                    alert('地址解析失败，请检查输入或网络连接');
+                });
+        });
+
+        // 规划路线功能
+        document.getElementById('directionButton').addEventListener('click', function () {
+            var address = document.getElementById('addressInput').value;
+            var mode = document.getElementById('mode').value;
+
+            if (!address) {
+                alert('请输入目的地');
+                return;
+            }
+
+            // 获取用户当前位置
+            var userPosition = userMarker ? userMarker.getPosition() : null;
+            if (!userPosition) {
+                alert('无法获取您的位置，请先定位或手动校准');
+                return;
+            }
+
+            // 使用高德地图Web服务API的地理编码服务获取终点经纬度
+            var geocodeUrl = `https://restapi.amap.com/v3/geocode/geo?key=3bf3c2f8c787e10ad549dfb9206468df&address=${encodeURIComponent(address)}`;
+
+            fetch(geocodeUrl)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === '1' && data.geocodes.length > 0) {
+                        var endCoords = data.geocodes[0].location.split(',');
+                        var end = `${endCoords[0]},${endCoords[1]}`;
+
+                        // 清除旧路线
+                        if (oldPolyline) {
+                            map.remove(oldPolyline); // 移除旧路线
+                        }
+
+                        // 获取用户选择的策略
+                        var strategy = 0;
+                        var avoidType = [];
+                        if (mode === 'driving') {
+                            if (document.getElementById('avoidHighway').checked) {
+                                strategy += 2; // 避开高速
+                                avoidType.push('highway');
+                            }
+                            if (document.getElementById('avoidElevated').checked) {
+                                strategy += 4; // 避开高架
+                                avoidType.push('elevator');
+                            }
+                            if (document.getElementById('avoidBicycleProhibited').checked) {
+                                avoidType.push('bicycle_prohibited'); // 避开非机动车禁行道路
+                            }
+                        }
+
+                        // 构造 avoid_type 参数
+                        var avoidTypeParam = avoidType.length > 0 ? `&avoid_type=${avoidType.join(',')}` : '';
+
+                        // 根据出行方式选择不同的路线规划API
+                        var directionUrl;
+                        if (mode === 'driving') {
+                            // 使用驾车路线规划API
+                            directionUrl = `https://restapi.amap.com/v3/direction/driving?key=3bf3c2f8c787e10ad549dfb9206468df&origin=${userPosition.lng},${userPosition.lat}&destination=${end}&extensions=base&strategy=${strategy}${avoidTypeParam}`;
+                        }
+
+                        fetch(directionUrl)
+                            .then(response => response.json())
+                            .then(data => {
+                                if (data.status === '1') {
+                                    alert('路线规划成功');
+                                    // 解析导航结果并显示在地图上
+                                    var path = [];
+                                    try {
+                                        if (mode === 'driving') {
+                                            data.route.paths[0].steps.forEach(step => {
+                                                step.polyline.split(';').forEach(point => {
+                                                    var [lng, lat] = point.split(',');
+                                                    path.push([lng, lat]);
+                                                });
+                                            });
+                                        }
+                                    } catch (e) {
+                                        console.error('解析路线数据失败', e);
+                                        return;
+                                    }
+
+                                    oldPolyline = new AMap.Polyline({
+                                        path: path,
+                                        strokeColor: mode === 'driving' ? "#0091ff" : "#00ff00",
+                                        strokeWeight: 6,
+                                        strokeOpacity: 0.8
+                                    });
+                                    map.add(oldPolyline);
+                                    map.setFitView(); // 调整地图视野
+                                } else {
+                                    alert('路线规划失败');
+                                }
+                            })
+                            .catch(error => {
+                                console.error('路线规划失败', error);
+                                alert('路线规划失败');
+                            });
+                    } else {
+                        alert('终点地址解析失败，请检查输入');
+                    }
+                })
+                .catch(error => {
+                    console.error('地址解析失败', error);
+                    alert('终点地址解析失败，请检查输入');
+                });
+        });
+
+        // 清除路线功能
+        document.getElementById('clearButton').addEventListener('click', function () {
+            // 清除路线
+            if (oldPolyline) {
+                map.remove(oldPolyline); // 移除旧路线
+                oldPolyline = null;
+            }
+
+            // 清除目的地标注
+            if (destinationMarker) {
+                map.remove(destinationMarker); // 移除目的地标注
+                destinationMarker = null;
+            }
+
+            alert('路线和目的地标注已清除');
+        });
+    </script>
+</body>
+</html>
